@@ -1,124 +1,106 @@
+require('dotenv').config();
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const express = require('express');
 const cron = require('node-cron');
-const sqlite3 = require('sqlite3');
-const { open } = require('sqlite');
-const path = require('path');
+const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 app.use(express.json());
-app.use(express.static('public')); // Serve o HTML da pasta public
+app.use(express.static('public'));
 
-let db;
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
-// Inicialização do Banco de Dados
-(async () => {
-    try {
-        db = await open({
-            filename: path.resolve(__dirname, 'database.db'), // Caminho absoluto
-            driver: sqlite3.Database
-        });
-
-        console.log("sqlite: Conectado ao banco de dados.");
-
-        await db.exec(`
-            CREATE TABLE IF NOT EXISTS agendamentos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                chatId TEXT,
-                link TEXT,
-                descricao TEXT,
-                data_postagem DATETIME,
-                enviado INTEGER DEFAULT 0
-            );
-        `);
-        await db.exec(`
-            CREATE TABLE IF NOT EXISTS agendamentos_status (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                chatId TEXT,
-                acao TEXT,
-                mensagem TEXT,
-                data_execucao DATETIME,
-                executado INTEGER DEFAULT 0
-            );
-        `);
-        console.log("sqlite: Tabelas verificadas/criadas.");
-    } catch (error) {
-        console.error("sqlite: Erro ao abrir banco:", error);
-    }
-})();
-
-// Inicialização do WhatsApp
 const client = new Client({
     authStrategy: new LocalAuth(),
-    puppeteer: { args: ['--no-sandbox'] }
+    puppeteer: { headless: true, args: ['--no-sandbox'] }
 });
 
 client.on('qr', qr => qrcode.generate(qr, { small: true }));
-client.on('ready', () => console.log('✅ Bot do WhatsApp Pronto!'));
+client.on('ready', () => console.log('✅ WhatsApp Conectado!'));
 client.initialize();
 
-// --- ROTAS DA API ---
-
-app.get('/grupos', async (req, res) => {
-    try {
-        if (!client.info) return res.status(503).json({ erro: "Bot não pronto" });
-        const chats = await client.getChats();
-        const grupos = chats.filter(c => c.isGroup).map(g => ({ id: g.id._serialized, name: g.name }));
-        res.json(grupos);
-    } catch (err) { res.status(500).json({ erro: err.message }); }
-});
-
+// Rota de Agendamento de Link
 app.post('/agendar-link', async (req, res) => {
-    const { chatId, link, descricao, data } = req.body;
-    await db.run('INSERT INTO agendamentos (chatId, link, descricao, data_postagem) VALUES (?, ?, ?, ?)', [chatId, link, descricao, data]);
-    res.json({ status: 'Link agendado' });
+    try {
+        const { chatId, link, descricao, data } = req.body;
+        if (!chatId || !link || !data) return res.status(400).json({ erro: "Dados incompletos" });
+
+        const { error } = await supabase.from('agendamentos').insert([{
+            chatid: chatId, 
+            link, 
+            descricao, 
+            data_postagem: new Date(data).toISOString() 
+        }]);
+
+        if (error) throw error;
+        res.json({ ok: true });
+    } catch (err) {
+        console.error("Erro no Link:", err.message);
+        res.status(500).json({ erro: err.message });
+    }
 });
 
+// Rota de Agendamento de Status
 app.post('/agendar-status', async (req, res) => {
-    const { chatId, acao, mensagem, data } = req.body;
-    await db.run('INSERT INTO agendamentos_status (chatId, acao, mensagem, data_execucao) VALUES (?, ?, ?, ?)', [chatId, acao, mensagem, data]);
-    res.json({ status: 'Status agendado' });
+    try {
+        const { chatId, acao, mensagem, data } = req.body;
+        if (!chatId || !acao || !data) return res.status(400).json({ erro: "Dados incompletos" });
+
+        const { error } = await supabase.from('agendamentos_status').insert([{
+            chatid: chatId, 
+            acao, 
+            mensagem, 
+            data_execucao: new Date(data).toISOString()
+        }]);
+
+        if (error) throw error;
+        res.json({ ok: true });
+    } catch (err) {
+        console.error("Erro no Status:", err.message);
+        res.status(500).json({ erro: err.message });
+    }
 });
 
 app.get('/listagem-geral', async (req, res) => {
-    const links = await db.all('SELECT *, "link" as tipo FROM agendamentos');
-    const status = await db.all('SELECT *, "status" as tipo FROM agendamentos_status');
-    res.json([...links, ...status]);
+    const { data: links } = await supabase.from('agendamentos').select('*');
+    const { data: status } = await supabase.from('agendamentos_status').select('*');
+    res.json([
+        ...(links || []).map(i => ({ ...i, tipo: 'link', data_ref: i.data_postagem, concluido: i.enviado })),
+        ...(status || []).map(i => ({ ...i, tipo: 'status', data_ref: i.data_execucao, concluido: i.executado }))
+    ]);
 });
 
-app.delete('/remover/:tipo/:id', async (req, res) => {
-    const tabela = req.params.tipo === 'link' ? 'agendamentos' : 'agendamentos_status';
-    await db.run(`DELETE FROM ${tabela} WHERE id = ?`, [req.params.id]);
-    res.json({ status: 'Removido' });
+app.get('/grupos', async (req, res) => {
+    if (!client.info) return res.status(503).json({ erro: "Bot offline" });
+    const chats = await client.getChats();
+    res.json(chats.filter(c => c.isGroup).map(g => ({ id: g.id._serialized, name: g.name })));
 });
 
-// --- CRON JOB (O VIGILANTE) ---
+// CRON JOB - O "Motor" do Sistema
 cron.schedule('* * * * *', async () => {
-    const agora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', hour12: false }).replace(',', '');
-    // Simplificação de data para comparação: YYYY-MM-DD HH:mm
-    const dataFormatada = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    const agora = new Date().toISOString();
 
-    // Enviar Links
-    const links = await db.all('SELECT * FROM agendamentos WHERE data_postagem <= ? AND enviado = 0', [dataFormatada]);
-    for (const item of links) {
+    // Executar Links
+    const { data: links } = await supabase.from('agendamentos').select('*').lte('data_postagem', agora).eq('enviado', false);
+    for (const link of (links || [])) {
         try {
-            const msg = item.descricao ? `*${item.descricao}*\n\n${item.link}` : item.link;
-            await client.sendMessage(item.chatId, msg);
-            await db.run('UPDATE agendamentos SET enviado = 1 WHERE id = ?', [item.id]);
-        } catch (e) { console.error("Erro link:", e); }
+            const texto = link.descricao ? `*${link.descricao}*\n\n${link.link}` : link.link;
+            await client.sendMessage(link.chatid, texto);
+            await supabase.from('agendamentos').update({ enviado: true }).eq('id', link.id);
+        } catch (e) { console.error("Falha ao enviar link:", e.message); }
     }
 
-    // Mudar Status
-    const status = await db.all('SELECT * FROM agendamentos_status WHERE data_execucao <= ? AND executado = 0', [dataFormatada]);
-    for (const item of status) {
+    // Executar Status
+    const { data: status } = await supabase.from('agendamentos_status').select('*').lte('data_execucao', agora).eq('executado', false);
+    for (const st of (status || [])) {
         try {
-            const chat = await client.getChatById(item.chatId);
-            await chat.setMessagesAdminsOnly(item.acao === 'fechar');
-            if (item.mensagem) await client.sendMessage(item.chatId, item.mensagem);
-            await db.run('UPDATE agendamentos_status SET executado = 1 WHERE id = ?', [item.id]);
-        } catch (e) { console.error("Erro status:", e); }
+            const chat = await client.getChatById(st.chatid);
+            await chat.setMessagesAdminsOnly(st.acao === 'fechar');
+            if (st.mensagem) await client.sendMessage(st.chatid, st.mensagem);
+            await supabase.from('agendamentos_status').update({ executado: true }).eq('id', st.id);
+        } catch (e) { console.error("Falha ao mudar status:", e.message); }
     }
 });
 
-app.listen(3000, () => console.log('🚀 Painel rodando em http://localhost:3000'));
+app.listen(3000, () => console.log('🚀 Servidor em http://localhost:3000'));
