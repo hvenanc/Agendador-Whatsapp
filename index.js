@@ -11,12 +11,29 @@ app.use(express.static('public'));
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
+const fs = require('fs');
+
+// Função para encontrar o executável do Chrome/Chromium
+const getExecutablePath = () => {
+    // Caminhos comuns no Linux/Railway
+    const paths = [
+        process.env.PUPPETEER_EXECUTABLE_PATH,
+        '/usr/bin/google-chrome-stable',
+        '/usr/bin/chromium-browser',
+        '/usr/bin/chromium'
+    ];
+
+    for (const path of paths) {
+        if (path && fs.existsSync(path)) return path;
+    }
+    return null; // Se retornar null, ele tentará usar o padrão do Puppeteer
+};
+
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
         headless: true,
-        // O caminho '/usr/bin/chromium' é o padrão no Railway com Nixpacks
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
+        executablePath: getExecutablePath(),
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',

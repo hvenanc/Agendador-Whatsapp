@@ -1,9 +1,10 @@
 [phases.setup]
-nixPkgs = ['...', 'chromium', 'glib']
+nixPkgs = ['nodejs', 'chromium', 'glib', 'nss', 'fontconfig']
 
 [phases.build]
 cmds = ['npm install']
 
 [variables]
 PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true'
-PUPPETEER_EXECUTABLE_PATH = '/usr/bin/chromium'
+//No Nixpacks, o caminho costuma ser este:
+PUPPETEER_EXECUTABLE_PATH = '/usr/bin/google-chrome-stable'
