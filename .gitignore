@@ -1,0 +1,27 @@
+# Dependências
+node_modules/
+dist/
+build/
+
+# Sessão do WhatsApp (CRÍTICO: Não suba isso!)
+.wwebjs_auth/
+.wwebjs_cache/
+session.json
+
+# Banco de Dados Local
+database.db
+database.db-journal
+
+# Logs e arquivos de sistema
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+
+# Configurações de Ambiente (se você usar .env no futuro)
+.env
+.env.local
+
+# Puppeteer / Chrome de teste
+.local-chromium/
