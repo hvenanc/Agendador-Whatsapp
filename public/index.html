@@ -2,109 +2,139 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel WhatsApp Bot</title>
+    <title>ZapManager Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 min-h-screen p-4 md:p-8">
-
-    <div class="max-w-4xl mx-auto space-y-6">
+<body class="bg-gray-100 min-h-screen p-4 md:p-10">
+    <div class="max-w-6xl mx-auto space-y-6">
         
-        <div class="bg-white p-6 rounded-2xl shadow-xl border-t-4 border-blue-500">
-            <h2 class="text-2xl font-bold text-gray-800 mb-4 text-center">Conexão do Sistema</h2>
-            
-            <div id="auth-status" class="flex flex-col items-center space-y-4">
-                <p id="status-msg" class="text-lg font-medium text-gray-600">Verificando status...</p>
-                
-                <div id="auth-options" class="flex gap-4">
-                    <button onclick="alternarMetodo('qr')" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">Usar QR Code</button>
-                    <button onclick="alternarMetodo('fone')" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition">Usar Telefone</button>
+        <div class="bg-white p-6 rounded-xl shadow-lg border-t-4 border-blue-500 text-center">
+            <h2 class="text-xl font-bold mb-4">Conexão WhatsApp</h2>
+            <div id="status-container">
+                <p id="status-msg" class="font-medium text-gray-600">Verificando...</p>
+                <div id="auth-actions" class="mt-4 flex justify-center gap-2">
+                    <button onclick="document.getElementById('qr-box').classList.toggle('hidden')" class="bg-blue-600 text-white px-4 py-2 rounded">QR Code</button>
+                    <button onclick="document.getElementById('phone-box').classList.toggle('hidden')" class="bg-green-600 text-white px-4 py-2 rounded">Telefone</button>
                 </div>
-
-                <div id="qr-container" class="hidden mt-4 p-4 bg-gray-50 rounded-lg">
-                    <img id="qrcode-img" src="" alt="QR Code" class="max-w-[250px] border-4 border-white shadow-sm">
-                    <p class="text-xs text-gray-500 mt-2 text-center">Escaneie com o seu WhatsApp</p>
-                </div>
-
-                <div id="phone-container" class="hidden mt-4 text-center space-y-4">
-                    <input type="text" id="phone-number" placeholder="5511999999999" class="border-2 border-gray-300 p-2 rounded-lg w-full text-center text-xl">
-                    <button onclick="gerarCodigoPareamento()" class="bg-green-500 text-white w-full py-2 rounded-lg font-bold">Gerar Código de 8 Dígitos</button>
-                    <div id="pairing-code-display" class="text-4xl font-mono font-bold text-blue-700 tracking-widest py-4 bg-blue-50 rounded-lg hidden"></div>
+                <div id="qr-box" class="hidden mt-4"><img id="qrcode-img" class="mx-auto border"></div>
+                <div id="phone-box" class="hidden mt-4 space-y-2">
+                    <input type="text" id="phone-input" placeholder="55119..." class="border p-2 rounded">
+                    <button onclick="gerarCode()" class="bg-green-500 text-white px-4 py-2 rounded">Gerar</button>
+                    <div id="code-display" class="text-2xl font-mono font-bold mt-2"></div>
                 </div>
             </div>
         </div>
 
-        <div id="main-panel" class="opacity-40 pointer-events-none bg-white p-6 rounded-2xl shadow-lg transition-opacity">
-            <h2 class="text-xl font-bold mb-4">Novo Agendamento</h2>
-            <p class="text-sm text-gray-500">Conecte o WhatsApp para liberar as funções de agendamento.</p>
-        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="bg-white p-6 rounded-xl shadow-lg">
+                <h2 class="text-xl font-bold mb-4 border-b pb-2">1. Selecione o Grupo</h2>
+                <div id="lista-grupos" class="space-y-2 h-[400px] overflow-y-auto text-sm">
+                    <p class="text-gray-400 italic">Conecte para ver os grupos...</p>
+                </div>
+            </div>
 
+            <div class="lg:col-span-2 space-y-6">
+                <div id="painel-controle" class="bg-white p-6 rounded-xl shadow-lg opacity-50 pointer-events-none transition-opacity">
+                    <h2 class="text-xl font-bold mb-4">Gerenciar: <span id="nome-grupo" class="text-blue-600">Nenhum</span></h2>
+                    <input type="hidden" id="chat-id">
+                    <div class="space-y-4">
+                        <input type="text" id="link-input" placeholder="Link (URL)" class="w-full border p-2 rounded">
+                        <textarea id="desc-input" placeholder="Descrição" class="w-full border p-2 rounded"></textarea>
+                        <input type="datetime-local" id="data-input" class="w-full border p-2 rounded">
+                        <button onclick="agendar()" class="w-full bg-blue-600 text-white py-2 rounded font-bold">Agendar Postagem</button>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-xl shadow-lg">
+                    <h2 class="text-xl font-bold mb-4">Fila de Agendamentos</h2>
+                    <table class="w-full text-left border-collapse">
+                        <thead><tr class="bg-gray-50 border-b">
+                            <th class="p-2">Data</th><th class="p-2">Descrição</th><th class="p-2">Status</th><th class="p-2">Ação</th>
+                        </tr></thead>
+                        <tbody id="tbody-fila"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
-        function alternarMetodo(metodo) {
-            document.getElementById('qr-container').classList.add('hidden');
-            document.getElementById('phone-container').classList.add('hidden');
-            
-            if(metodo === 'qr') document.getElementById('qr-container').classList.remove('hidden');
-            if(metodo === 'fone') document.getElementById('phone-container').classList.remove('hidden');
-        }
+        let selecionado = null;
 
-        async function gerarCodigoPareamento() {
-            const numero = document.getElementById('phone-number').value;
-            const display = document.getElementById('pairing-code-display');
-            
-            if(!numero) return alert("Digite o número com DDI e DDD (ex: 5511999999999)");
-            
-            display.innerText = "GERANDO...";
-            display.classList.remove('hidden');
+        async function checarStatus() {
+            const res = await fetch('/status-auth');
+            const status = await res.json();
+            const msg = document.getElementById('status-msg');
+            const painel = document.getElementById('painel-controle');
 
-            try {
-                const res = await fetch('/solicitar-codigo', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ numero })
-                });
-                const data = await res.json();
-                if(data.code) {
-                    display.innerText = data.code;
-                } else {
-                    display.innerText = "ERRO";
-                }
-            } catch (e) {
-                display.innerText = "ERRO CONEXÃO";
+            if (status.conectado) {
+                msg.innerHTML = "✅ <span class='text-green-600 font-bold'>Conectado</span>";
+                painel.classList.remove('opacity-50', 'pointer-events-none');
+                carregarGrupos();
+            } else {
+                msg.innerHTML = "❌ <span class='text-red-500'>Desconectado</span>";
+                if (status.base64) document.getElementById('qrcode-img').src = status.base64;
             }
         }
 
-        async function verificarStatus() {
-            try {
-                const res = await fetch('/status-auth');
-                const status = await res.json();
-                
-                const msg = document.getElementById('status-msg');
-                const painel = document.getElementById('main-panel');
-                const opts = document.getElementById('auth-options');
-
-                if (status.conectado) {
-                    msg.innerHTML = "✅ <span class='text-green-600 font-bold'>BOT ONLINE</span>";
-                    painel.classList.remove('opacity-40', 'pointer-events-none');
-                    opts.classList.add('hidden');
-                    document.getElementById('qr-container').classList.add('hidden');
-                    document.getElementById('phone-container').classList.add('hidden');
-                } else {
-                    msg.innerHTML = "❌ <span class='text-red-500'>BOT DESCONECTADO</span>";
-                    painel.classList.add('opacity-40', 'pointer-events-none');
-                    opts.classList.remove('hidden');
-                    
-                    if(status.base64) {
-                        document.getElementById('qrcode-img').src = status.base64;
-                    }
-                }
-            } catch (e) { console.error("Erro ao verificar status"); }
+        async function carregarGrupos() {
+            const res = await fetch('/grupos');
+            if (!res.ok) return;
+            const grupos = await res.json();
+            const container = document.getElementById('lista-grupos');
+            container.innerHTML = grupos.map(g => `
+                <div onclick="selecionarGrupo('${g.id}', '${g.name}')" class="p-2 border rounded cursor-pointer hover:bg-blue-50 transition">
+                    ${g.name}
+                </div>
+            `).join('');
         }
 
-        setInterval(verificarStatus, 5000);
-        verificarStatus();
+        function selecionarGrupo(id, nome) {
+            document.getElementById('chat-id').value = id;
+            document.getElementById('nome-grupo').innerText = nome;
+            alert("Grupo selecionado: " + nome);
+        }
+
+        async function agendar() {
+            const data = {
+                chatId: document.getElementById('chat-id').value,
+                link: document.getElementById('link-input').value,
+                descricao: document.getElementById('desc-input').value,
+                data: document.getElementById('data-input').value
+            };
+            const res = await fetch('/agendar-link', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            if (res.ok) { alert("Agendado!"); atualizarFila(); }
+        }
+
+        async function atualizarFila() {
+            const res = await fetch('/listagem-geral');
+            const dados = await res.json();
+            const tbody = document.getElementById('tbody-fila');
+            tbody.innerHTML = dados.map(d => `
+                <tr class="border-b text-sm">
+                    <td class="p-2">${new Date(d.data_postagem).toLocaleString()}</td>
+                    <td class="p-2">${d.descricao || 'Sem desc.'}</td>
+                    <td class="p-2">${d.enviado ? '✅' : '⏳'}</td>
+                    <td class="p-2"><button onclick="remover(${d.id})" class="text-red-500">Excluir</button></td>
+                </tr>
+            `).join('');
+        }
+
+        async function remover(id) {
+            if(confirm("Excluir?")) {
+                await fetch(`/remover/link/${id}`, { method: 'DELETE' });
+                atualizarFila();
+            }
+        }
+
+        setInterval(checarStatus, 5000);
+        setInterval(atualizarFila, 10000);
+        checarStatus();
+        atualizarFila();
     </script>
 </body>
 </html>
