@@ -8,6 +8,50 @@
 </head>
 
 <body class="bg-gray-100 min-h-screen p-4 md:p-10">
+
+    <div id="auth-section" class="max-w-6xl mx-auto mb-6 bg-white p-6 rounded-xl shadow-lg">
+        <h2 class="text-xl font-bold mb-4 border-b pb-2">Status da Conexão</h2>
+        <div id="auth-container" class="flex flex-col items-center justify-center p-4">
+            <p id="auth-msg" class="text-gray-600">Verificando conexão...</p>
+            <div id="qrcode-wrapper" class="hidden mt-4">
+                <img id="qrcode-img" src="" alt="QR Code" class="border-4 border-gray-200 rounded-lg">
+                <p class="text-sm text-red-500 mt-2">Escaneie o código acima para conectar.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function checarStatus() {
+            try {
+                const res = await fetch('/status-auth');
+                const status = await res.json();
+
+                const msg = document.getElementById('auth-msg');
+                const wrapper = document.getElementById('qrcode-wrapper');
+                const img = document.getElementById('qrcode-img');
+                const painel = document.getElementById('painel-controle'); // Seu painel existente
+
+                if (status.conectado) {
+                    msg.innerHTML = '<span class="text-green-600 font-bold">✅ WhatsApp Conectado!</span>';
+                    wrapper.classList.add('hidden');
+                    if (painel) painel.classList.remove('opacity-50', 'pointer-events-none');
+                } else if (status.base64) {
+                    msg.innerHTML = '<span class="text-orange-500 font-bold">⚠️ Aguardando Autenticação</span>';
+                    img.src = status.base64;
+                    wrapper.classList.remove('hidden');
+                } else {
+                    msg.innerText = "Iniciando sistema... Aguarde o QR Code.";
+                }
+            } catch (e) {
+                console.error("Erro ao checar status", e);
+            }
+        }
+
+        // Verifica o status a cada 5 segundos
+        setInterval(checarStatus, 5000);
+        checarStatus();
+    </script>
+
     <div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         <div class="bg-white p-6 rounded-xl shadow-lg">
@@ -54,7 +98,7 @@
 
             <div class="bg-white p-6 rounded-xl shadow-lg">
                 <h2 class="text-xl font-bold mb-4 flex justify-between">
-                    Fila de Execução 
+                    Fila de Execução
                     <button onclick="atualizarFila()" class="text-sm font-normal text-blue-500">Atualizar ↻</button>
                 </h2>
                 <div class="overflow-x-auto text-[11px]">
@@ -69,7 +113,9 @@
                             </tr>
                         </thead>
                         <tbody id="tabela-fila">
-                            <tr><td colspan="5" class="p-4 text-center text-gray-400">Carregando agendamentos...</td></tr>
+                            <tr>
+                                <td colspan="5" class="p-4 text-center text-gray-400">Carregando agendamentos...</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -87,7 +133,7 @@
                 const dados = await res.json();
                 const container = document.getElementById('lista-grupos');
                 container.innerHTML = '';
-                
+
                 if (dados.erro) throw new Error(dados.erro);
 
                 dados.forEach(g => {
@@ -185,7 +231,7 @@
                 dados.forEach(d => {
                     const statusBool = d.concluido; // d.enviado ou d.executado mapeado pelo backend
                     const dataRef = new Date(d.data_ref).toLocaleString('pt-BR');
-                    
+
                     tbody.innerHTML += `
                         <tr class="border-b hover:bg-gray-50 transition">
                             <td class="p-2 font-bold text-gray-700 uppercase">${d.tipo}</td>
@@ -220,7 +266,7 @@
         // Init
         carregarGrupos();
         atualizarFila();
-        
+
         // Atualiza a fila automaticamente a cada 30 segundos
         setInterval(atualizarFila, 30000);
     </script>
