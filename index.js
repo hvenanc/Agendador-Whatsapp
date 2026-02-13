@@ -44,6 +44,7 @@ const client = new Client({
   puppeteer: {
     headless: true,
     executablePath: getExecutablePath(),
+    protocolTimeout: 240000,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
