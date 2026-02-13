@@ -1,229 +1,110 @@
 <!DOCTYPE html>
 <html lang="pt-br">
-
 <head>
     <meta charset="UTF-8">
-    <title>ZapManager Pro - Supabase Edition</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel WhatsApp Bot</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
+<body class="bg-gray-100 min-h-screen p-4 md:p-8">
 
-<body class="bg-gray-100 min-h-screen p-4 md:p-10">
-    <div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-        <div class="bg-white p-6 rounded-xl shadow-lg">
-            <h2 class="text-xl font-bold mb-4 border-b pb-2">1. Selecione o Grupo</h2>
-            <div id="lista-grupos" class="space-y-2 h-[500px] overflow-y-auto pr-2 text-sm">
-                <p class="text-gray-400">Carregando grupos...</p>
-            </div>
-        </div>
-
-        <div class="lg:col-span-2 space-y-6">
-            <div id="painel-controle"
-                class="bg-white p-6 rounded-xl shadow-lg opacity-50 pointer-events-none transition-opacity">
-                <h2 class="text-xl font-bold mb-4">Gerenciar: <span id="nome-grupo" class="text-blue-600">Nenhum</span>
-                </h2>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="space-y-3 p-4 border rounded-lg bg-blue-50">
-                        <h3 class="font-bold">Agendar Link</h3>
-                        <input id="desc-link" type="text" placeholder="Descrição da postagem"
-                            class="w-full p-2 border rounded text-sm">
-                        <input id="url-link" type="text" placeholder="URL (https://...)"
-                            class="w-full p-2 border rounded text-sm">
-                        <input id="data-link" type="datetime-local" class="w-full p-2 border rounded text-sm">
-                        <button onclick="agendarLink()"
-                            class="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700">Agendar
-                            Link</button>
-                    </div>
-
-                    <div class="space-y-3 p-4 border rounded-lg bg-purple-50">
-                        <h3 class="font-bold">Agendar Abertura/Fechamento</h3>
-                        <select id="acao-status" class="w-full p-2 border rounded text-sm">
-                            <option value="abrir">Abrir (Todos falam)</option>
-                            <option value="fechar">Fechar (Só ADMs)</option>
-                        </select>
-                        <textarea id="msg-status" placeholder="Mensagem de aviso..."
-                            class="w-full p-2 border rounded text-sm"></textarea>
-                        <input id="data-status" type="datetime-local" class="w-full p-2 border rounded text-sm">
-                        <button onclick="agendarStatus()"
-                            class="w-full bg-purple-600 text-white py-2 rounded font-bold hover:bg-purple-700">Agendar
-                            Status</button>
-                    </div>
+    <div class="max-w-4xl mx-auto space-y-6">
+        
+        <div class="bg-white p-6 rounded-2xl shadow-xl border-t-4 border-blue-500">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4 text-center">Conexão do Sistema</h2>
+            
+            <div id="auth-status" class="flex flex-col items-center space-y-4">
+                <p id="status-msg" class="text-lg font-medium text-gray-600">Verificando status...</p>
+                
+                <div id="auth-options" class="flex gap-4">
+                    <button onclick="alternarMetodo('qr')" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">Usar QR Code</button>
+                    <button onclick="alternarMetodo('fone')" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition">Usar Telefone</button>
                 </div>
-            </div>
 
-            <div class="bg-white p-6 rounded-xl shadow-lg">
-                <h2 class="text-xl font-bold mb-4 flex justify-between">
-                    Fila de Execução 
-                    <button onclick="atualizarFila()" class="text-sm font-normal text-blue-500">Atualizar ↻</button>
-                </h2>
-                <div class="overflow-x-auto text-[11px]">
-                    <table class="w-full text-left border-collapse">
-                        <thead>
-                            <tr class="bg-gray-100 text-gray-600">
-                                <th class="p-2 border uppercase">Tipo</th>
-                                <th class="p-2 border uppercase">Data/Hora</th>
-                                <th class="p-2 border uppercase">Conteúdo</th>
-                                <th class="p-2 border uppercase text-center">Status</th>
-                                <th class="p-2 border uppercase text-center">Ação</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tabela-fila">
-                            <tr><td colspan="5" class="p-4 text-center text-gray-400">Carregando agendamentos...</td></tr>
-                        </tbody>
-                    </table>
+                <div id="qr-container" class="hidden mt-4 p-4 bg-gray-50 rounded-lg">
+                    <img id="qrcode-img" src="" alt="QR Code" class="max-w-[250px] border-4 border-white shadow-sm">
+                    <p class="text-xs text-gray-500 mt-2 text-center">Escaneie com o seu WhatsApp</p>
+                </div>
+
+                <div id="phone-container" class="hidden mt-4 text-center space-y-4">
+                    <input type="text" id="phone-number" placeholder="5511999999999" class="border-2 border-gray-300 p-2 rounded-lg w-full text-center text-xl">
+                    <button onclick="gerarCodigoPareamento()" class="bg-green-500 text-white w-full py-2 rounded-lg font-bold">Gerar Código de 8 Dígitos</button>
+                    <div id="pairing-code-display" class="text-4xl font-mono font-bold text-blue-700 tracking-widest py-4 bg-blue-50 rounded-lg hidden"></div>
                 </div>
             </div>
         </div>
+
+        <div id="main-panel" class="opacity-40 pointer-events-none bg-white p-6 rounded-2xl shadow-lg transition-opacity">
+            <h2 class="text-xl font-bold mb-4">Novo Agendamento</h2>
+            <p class="text-sm text-gray-500">Conecte o WhatsApp para liberar as funções de agendamento.</p>
+        </div>
+
     </div>
 
     <script>
-        let grupoAtivo = null;
+        function alternarMetodo(metodo) {
+            document.getElementById('qr-container').classList.add('hidden');
+            document.getElementById('phone-container').classList.add('hidden');
+            
+            if(metodo === 'qr') document.getElementById('qr-container').classList.remove('hidden');
+            if(metodo === 'fone') document.getElementById('phone-container').classList.remove('hidden');
+        }
 
-        // Carrega a lista de grupos do WhatsApp
-        async function carregarGrupos() {
+        async function gerarCodigoPareamento() {
+            const numero = document.getElementById('phone-number').value;
+            const display = document.getElementById('pairing-code-display');
+            
+            if(!numero) return alert("Digite o número com DDI e DDD (ex: 5511999999999)");
+            
+            display.innerText = "GERANDO...";
+            display.classList.remove('hidden');
+
             try {
-                const res = await fetch('/grupos');
-                const dados = await res.json();
-                const container = document.getElementById('lista-grupos');
-                container.innerHTML = '';
-                
-                if (dados.erro) throw new Error(dados.erro);
-
-                dados.forEach(g => {
-                    const b = document.createElement('button');
-                    b.className = "w-full text-left p-3 border rounded hover:bg-blue-50 mb-2 transition shadow-sm bg-white";
-                    b.innerHTML = `<b>${g.name}</b><br><span class="text-[10px] text-gray-400 font-mono">${g.id}</span>`;
-                    b.onclick = () => {
-                        grupoAtivo = g;
-                        document.getElementById('nome-grupo').innerText = g.name;
-                        document.getElementById('painel-controle').classList.remove('opacity-50', 'pointer-events-none');
-                    };
-                    container.appendChild(b);
+                const res = await fetch('/solicitar-codigo', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ numero })
                 });
-            } catch (err) {
-                document.getElementById('lista-grupos').innerHTML = `<p class="text-red-500">Erro: ${err.message}</p>`;
-            }
-        }
-
-        // Envia agendamento de Link
-        async function agendarLink() {
-            const dataInput = document.getElementById('data-link').value;
-            const linkInput = document.getElementById('url-link').value;
-            const descInput = document.getElementById('desc-link').value;
-
-            if (!grupoAtivo || !dataInput || !linkInput) {
-                alert("Preencha o Grupo, o Link e a Data!");
-                return;
-            }
-
-            const body = {
-                chatId: grupoAtivo.id,
-                descricao: descInput,
-                link: linkInput,
-                data: dataInput
-            };
-
-            const response = await fetch('/agendar-link', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
-
-            if (response.ok) {
-                alert("Link agendado!");
-                atualizarFila();
-            } else {
-                alert("Erro ao agendar link.");
-            }
-        }
-
-        // Envia agendamento de Status
-        async function agendarStatus() {
-            const dataInput = document.getElementById('data-status').value;
-            const acaoInput = document.getElementById('acao-status').value;
-
-            if (!grupoAtivo || !dataInput) {
-                alert("Selecione o grupo e a data!");
-                return;
-            }
-
-            const body = {
-                chatId: grupoAtivo.id,
-                acao: acaoInput,
-                mensagem: document.getElementById('msg-status').value,
-                data: dataInput
-            };
-
-            const response = await fetch('/agendar-status', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
-
-            if (response.ok) {
-                alert("Status agendado!");
-                atualizarFila();
-            } else {
-                alert("Erro ao agendar status.");
-            }
-        }
-
-        // Busca todos os agendamentos do Supabase (via Backend)
-        async function atualizarFila() {
-            const tbody = document.getElementById('tabela-fila');
-            try {
-                const res = await fetch('/listagem-geral');
-                const dados = await res.json();
-                tbody.innerHTML = '';
-
-                if (dados.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-400">Nenhum agendamento encontrado.</td></tr>';
-                    return;
-                }
-
-                dados.forEach(d => {
-                    const statusBool = d.concluido; // d.enviado ou d.executado mapeado pelo backend
-                    const dataRef = new Date(d.data_ref).toLocaleString('pt-BR');
-                    
-                    tbody.innerHTML += `
-                        <tr class="border-b hover:bg-gray-50 transition">
-                            <td class="p-2 font-bold text-gray-700 uppercase">${d.tipo}</td>
-                            <td class="p-2 font-mono text-gray-500">${dataRef}</td>
-                            <td class="p-2 truncate max-w-[200px]" title="${d.link || d.mensagem}">${d.link || d.mensagem}</td>
-                            <td class="p-2 text-center">
-                                ${statusBool ? '<span class="text-green-600 font-bold">✅ OK</span>' : '<span class="text-orange-500 font-bold">⏳ Pendente</span>'}
-                            </td>
-                            <td class="p-2 text-center">
-                                ${!statusBool ? `<button onclick="remover('${d.tipo}', ${d.id})" class="text-red-500 hover:underline">Excluir</button>` : '-'}
-                            </td>
-                        </tr>
-                    `;
-                });
-            } catch (err) {
-                tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-red-500">Erro ao carregar fila.</td></tr>';
-            }
-        }
-
-        // Remove agendamento
-        async function remover(tipo, id) {
-            if (confirm(`Deseja realmente remover este agendamento de ${tipo}?`)) {
-                const res = await fetch(`/remover/${tipo}/${id}`, { method: 'DELETE' });
-                if (res.ok) {
-                    atualizarFila();
+                const data = await res.json();
+                if(data.code) {
+                    display.innerText = data.code;
                 } else {
-                    alert("Erro ao remover.");
+                    display.innerText = "ERRO";
                 }
+            } catch (e) {
+                display.innerText = "ERRO CONEXÃO";
             }
         }
 
-        // Init
-        carregarGrupos();
-        atualizarFila();
-        
-        // Atualiza a fila automaticamente a cada 30 segundos
-        setInterval(atualizarFila, 30000);
+        async function verificarStatus() {
+            try {
+                const res = await fetch('/status-auth');
+                const status = await res.json();
+                
+                const msg = document.getElementById('status-msg');
+                const painel = document.getElementById('main-panel');
+                const opts = document.getElementById('auth-options');
+
+                if (status.conectado) {
+                    msg.innerHTML = "✅ <span class='text-green-600 font-bold'>BOT ONLINE</span>";
+                    painel.classList.remove('opacity-40', 'pointer-events-none');
+                    opts.classList.add('hidden');
+                    document.getElementById('qr-container').classList.add('hidden');
+                    document.getElementById('phone-container').classList.add('hidden');
+                } else {
+                    msg.innerHTML = "❌ <span class='text-red-500'>BOT DESCONECTADO</span>";
+                    painel.classList.add('opacity-40', 'pointer-events-none');
+                    opts.classList.remove('hidden');
+                    
+                    if(status.base64) {
+                        document.getElementById('qrcode-img').src = status.base64;
+                    }
+                }
+            } catch (e) { console.error("Erro ao verificar status"); }
+        }
+
+        setInterval(verificarStatus, 5000);
+        verificarStatus();
     </script>
 </body>
-
 </html>

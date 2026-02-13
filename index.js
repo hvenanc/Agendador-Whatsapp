@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
+const qrcodeTerminal = require('qrcode-terminal');
+const QRCode = require('qrcode');
 const express = require('express');
 const cron = require('node-cron');
 const { createClient } = require('@supabase/supabase-js');
@@ -10,150 +11,101 @@ const app = express();
 app.use(express.json());
 app.use(express.static('public'));
 
-// Configuração Supabase 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
-/**
- * Função aprimorada para localizar o executável do navegador.
- * Em ambientes Docker/Railway, a variável PUPPETEER_EXECUTABLE_PATH 
- * definida pela imagem oficial ou pelo painel é o caminho mais seguro. 
- */
+let qrStatus = { base64: null, conectado: false, pairingCode: null };
+
 const getExecutablePath = () => {
-    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-        return process.env.PUPPETEER_EXECUTABLE_PATH;
-    }
-
-    const commonPaths = [
-        '/usr/bin/google-chrome-stable',
-        '/usr/bin/chromium-browser',
-        '/usr/bin/chromium',
-        '/usr/bin/google-chrome'
-    ];
-
-    for (const path of commonPaths) {
+    if (process.env.PUPPETEER_EXECUTABLE_PATH) return process.env.PUPPETEER_EXECUTABLE_PATH;
+    const paths = ['/usr/bin/google-chrome-stable', '/usr/bin/chromium-browser', '/usr/bin/chromium'];
+    for (const path of paths) {
         if (fs.existsSync(path)) return path;
     }
-    return null; 
+    return null;
 };
 
-// Inicialização do Cliente WhatsApp 
 const client = new Client({
-    authStrategy: new LocalAuth(), // Lembre-se que no Railway a sessão é perdida no restart sem volumes 
+    authStrategy: new LocalAuth(),
     puppeteer: {
         headless: true,
         executablePath: getExecutablePath(),
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu'
-        ]
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
     }
 });
 
-client.on('qr', qr => qrcode.generate(qr, { small: true }));
-client.on('ready', () => console.log('✅ WhatsApp Conectado!'));
-client.initialize();
+// Eventos de Autenticação
+client.on('qr', async (qr) => {
+    qrStatus.conectado = false;
+    qrcodeTerminal.generate(qr, { small: true });
+    try {
+        qrStatus.base64 = await QRCode.toDataURL(qr);
+    } catch (err) { console.error('Erro ao gerar QR Base64:', err); }
+});
 
-// --- ROTAS DA API --- 
+client.on('ready', () => {
+    console.log('✅ WhatsApp Conectado!');
+    qrStatus.conectado = true;
+    qrStatus.base64 = null;
+    qrStatus.pairingCode = null;
+});
+
+// Rota para Status e QR Code
+app.get('/status-auth', (req, res) => {
+    res.json(qrStatus);
+});
+
+// Rota para solicitar Código de Pareamento (Telefone)
+app.post('/solicitar-codigo', async (req, res) => {
+    const { numero } = req.body; // Ex: 5511999999999
+    if (!numero) return res.status(400).json({ erro: "Número necessário" });
+    
+    try {
+        const code = await client.requestPairingCode(numero);
+        qrStatus.pairingCode = code;
+        res.json({ code });
+    } catch (err) {
+        console.error("Erro no Pareamento:", err);
+        res.status(500).json({ erro: "Erro ao gerar código" });
+    }
+});
+
+// --- API DE GRUPOS E AGENDAMENTOS ---
+app.get('/grupos', async (req, res) => {
+    if (!qrStatus.conectado) return res.status(503).json({ erro: "Bot offline" });
+    try {
+        const chats = await client.getChats();
+        res.json(chats.filter(c => c.isGroup).map(g => ({ id: g.id._serialized, name: g.name })));
+    } catch (err) { res.status(500).json({ erro: err.message }); }
+});
 
 app.post('/agendar-link', async (req, res) => {
     try {
         const { chatId, link, descricao, data } = req.body;
-        if (!chatId || !link || !data) return res.status(400).json({ erro: "Dados incompletos" });
-
         const { error } = await supabase.from('agendamentos').insert([{
-            chatid: chatId, 
-            link, 
-            descricao, 
-            data_postagem: new Date(data).toISOString() 
+            chatid: chatId, link, descricao, data_postagem: new Date(data).toISOString() 
         }]);
-
         if (error) throw error;
         res.json({ ok: true });
-    } catch (err) {
-        console.error("Erro no Link:", err.message);
-        res.status(500).json({ erro: err.message });
-    }
+    } catch (err) { res.status(500).json({ erro: err.message }); }
 });
 
-app.post('/agendar-status', async (req, res) => {
-    try {
-        const { chatId, acao, mensagem, data } = req.body;
-        if (!chatId || !acao || !data) return res.status(400).json({ erro: "Dados incompletos" });
-
-        const { error } = await supabase.from('agendamentos_status').insert([{
-            chatid: chatId, 
-            acao, 
-            mensagem, 
-            data_execucao: new Date(data).toISOString()
-        }]);
-
-        if (error) throw error;
-        res.json({ ok: true });
-    } catch (err) {
-        console.error("Erro no Status:", err.message);
-        res.status(500).json({ erro: err.message });
-    }
-});
-
-app.get('/listagem-geral', async (req, res) => {
-    try {
-        const { data: links } = await supabase.from('agendamentos').select('*');
-        const { data: status } = await supabase.from('agendamentos_status').select('*');
-        res.json([
-            ...(links || []).map(i => ({ ...i, tipo: 'link', data_ref: i.data_postagem, concluido: i.enviado })),
-            ...(status || []).map(i => ({ ...i, tipo: 'status', data_ref: i.data_execucao, concluido: i.executado }))
-        ]);
-    } catch (err) {
-        res.status(500).json({ erro: err.message });
-    }
-});
-
-app.get('/grupos', async (req, res) => {
-    if (!client.info) return res.status(503).json({ erro: "Bot offline" });
-    try {
-        const chats = await client.getChats();
-        res.json(chats.filter(c => c.isGroup).map(g => ({ id: g.id._serialized, name: g.name })));
-    } catch (err) {
-        res.status(500).json({ erro: err.message });
-    }
-});
-
-// --- CRON JOB (O Motor) --- 
-
+// --- MOTOR DE AGENDAMENTOS (CRON) ---
 cron.schedule('* * * * *', async () => {
+    if (!qrStatus.conectado) return;
     const agora = new Date().toISOString();
-
-    // Processar Links
-    const { data: links } = await supabase.from('agendamentos')
-        .select('*')
-        .lte('data_postagem', agora)
-        .eq('enviado', false);
-
+    const { data: links } = await supabase.from('agendamentos').select('*').lte('data_postagem', agora).eq('enviado', false);
+    
     for (const link of (links || [])) {
         try {
             const texto = link.descricao ? `*${link.descricao}*\n\n${link.link}` : link.link;
             await client.sendMessage(link.chatid, texto);
             await supabase.from('agendamentos').update({ enviado: true }).eq('id', link.id);
-        } catch (e) { console.error("Falha ao enviar link:", e.message); }
-    }
-
-    // Processar Status (Abrir/Fechar Grupo)
-    const { data: status } = await supabase.from('agendamentos_status')
-        .select('*')
-        .lte('data_execucao', agora)
-        .eq('executado', false);
-
-    for (const st of (status || [])) {
-        try {
-            const chat = await client.getChatById(st.chatid);
-            await chat.setMessagesAdminsOnly(st.acao === 'fechar');
-            if (st.mensagem) await client.sendMessage(st.chatid, st.mensagem);
-            await supabase.from('agendamentos_status').update({ executado: true }).eq('id', st.id);
-        } catch (e) { console.error("Falha ao mudar status:", e.message); }
+        } catch (e) { console.error("Falha no envio:", e.message); }
     }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
+app.listen(PORT, () => {
+    console.log(`🚀 Servidor rodando na porta ${PORT}`);
+    client.initialize();
+});
