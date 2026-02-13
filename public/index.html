@@ -1,140 +1,262 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-    <meta charset="UTF-8">
-    <title>ZapManager Pro</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="UTF-8" />
+  <title>ZapManager Pro - Supabase Edition</title>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
+
 <body class="bg-gray-100 min-h-screen p-4 md:p-10">
-    <div class="max-w-6xl mx-auto space-y-6">
-        
-        <div class="bg-white p-6 rounded-xl shadow-lg border-t-4 border-blue-500 text-center">
-            <h2 class="text-xl font-bold mb-4">Conexão WhatsApp</h2>
-            <div id="status-container">
-                <p id="status-msg" class="font-medium text-gray-600">Verificando...</p>
-                <div id="auth-actions" class="mt-4 flex justify-center gap-2">
-                    <button onclick="document.getElementById('qr-box').classList.toggle('hidden')" class="bg-blue-600 text-white px-4 py-2 rounded">QR Code</button>
-                    <button onclick="document.getElementById('phone-box').classList.toggle('hidden')" class="bg-green-600 text-white px-4 py-2 rounded">Telefone</button>
-                </div>
-                <div id="qr-box" class="hidden mt-4"><img id="qrcode-img" class="mx-auto border"></div>
-                <div id="phone-box" class="hidden mt-4 space-y-2">
-                    <input type="text" id="phone-input" placeholder="55119..." class="border p-2 rounded">
-                    <button onclick="gerarCode()" class="bg-green-500 text-white px-4 py-2 rounded">Gerar</button>
-                    <div id="code-display" class="text-2xl font-mono font-bold mt-2"></div>
-                </div>
-            </div>
-        </div>
+  <div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div class="bg-white p-6 rounded-xl shadow-lg">
-                <h2 class="text-xl font-bold mb-4 border-b pb-2">1. Selecione o Grupo</h2>
-                <div id="lista-grupos" class="space-y-2 h-[400px] overflow-y-auto text-sm">
-                    <p class="text-gray-400 italic">Conecte para ver os grupos...</p>
-                </div>
-            </div>
-
-            <div class="lg:col-span-2 space-y-6">
-                <div id="painel-controle" class="bg-white p-6 rounded-xl shadow-lg opacity-50 pointer-events-none transition-opacity">
-                    <h2 class="text-xl font-bold mb-4">Gerenciar: <span id="nome-grupo" class="text-blue-600">Nenhum</span></h2>
-                    <input type="hidden" id="chat-id">
-                    <div class="space-y-4">
-                        <input type="text" id="link-input" placeholder="Link (URL)" class="w-full border p-2 rounded">
-                        <textarea id="desc-input" placeholder="Descrição" class="w-full border p-2 rounded"></textarea>
-                        <input type="datetime-local" id="data-input" class="w-full border p-2 rounded">
-                        <button onclick="agendar()" class="w-full bg-blue-600 text-white py-2 rounded font-bold">Agendar Postagem</button>
-                    </div>
-                </div>
-
-                <div class="bg-white p-6 rounded-xl shadow-lg">
-                    <h2 class="text-xl font-bold mb-4">Fila de Agendamentos</h2>
-                    <table class="w-full text-left border-collapse">
-                        <thead><tr class="bg-gray-50 border-b">
-                            <th class="p-2">Data</th><th class="p-2">Descrição</th><th class="p-2">Status</th><th class="p-2">Ação</th>
-                        </tr></thead>
-                        <tbody id="tbody-fila"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
+    <div class="bg-white p-6 rounded-xl shadow-lg">
+      <h2 class="text-xl font-bold mb-4 border-b pb-2">1. Selecione o Grupo</h2>
+      <div id="lista-grupos" class="space-y-2 h-[500px] overflow-y-auto pr-2 text-sm">
+        <p class="text-gray-400">Carregando grupos...</p>
+      </div>
     </div>
 
-    <script>
-        let selecionado = null;
+    <div class="lg:col-span-2 space-y-6">
 
-        async function checarStatus() {
-            const res = await fetch('/status-auth');
-            const status = await res.json();
-            const msg = document.getElementById('status-msg');
-            const painel = document.getElementById('painel-controle');
+      <div class="bg-white p-6 rounded-xl shadow-lg">
+        <h2 class="text-xl font-bold mb-4">Conexão WhatsApp</h2>
+        <p id="qr-status" class="text-gray-500 text-sm mb-3">Aguardando QR...</p>
+        <img id="qr-img" class="w-64 h-64 border rounded hidden" alt="QR Code WhatsApp" />
+        <p class="text-xs text-gray-400 mt-3">
+          Se já estiver conectado, o QR não aparece.
+        </p>
+      </div>
 
-            if (status.conectado) {
-                msg.innerHTML = "✅ <span class='text-green-600 font-bold'>Conectado</span>";
-                painel.classList.remove('opacity-50', 'pointer-events-none');
-                carregarGrupos();
-            } else {
-                msg.innerHTML = "❌ <span class='text-red-500'>Desconectado</span>";
-                if (status.base64) document.getElementById('qrcode-img').src = status.base64;
-            }
+      <div id="painel-controle" class="bg-white p-6 rounded-xl shadow-lg opacity-50 pointer-events-none transition-opacity">
+        <h2 class="text-xl font-bold mb-4">
+          Gerenciar: <span id="nome-grupo" class="text-blue-600">Nenhum</span>
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="space-y-3 p-4 border rounded-lg bg-blue-50">
+            <h3 class="font-bold">Agendar Link</h3>
+            <input id="desc-link" type="text" placeholder="Descrição da postagem..."
+              class="w-full p-2 border rounded text-sm" />
+            <input id="url-link" type="text" placeholder="URL https://..."
+              class="w-full p-2 border rounded text-sm" />
+            <input id="data-link" type="datetime-local" class="w-full p-2 border rounded text-sm" />
+            <button onclick="agendarLink()"
+              class="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700">
+              Agendar Link
+            </button>
+          </div>
+
+          <div class="space-y-3 p-4 border rounded-lg bg-purple-50">
+            <h3 class="font-bold">Agendar Abertura/Fechamento</h3>
+            <select id="acao-status" class="w-full p-2 border rounded text-sm">
+              <option value="abrir">Abrir (Todos falam)</option>
+              <option value="fechar">Fechar (Só ADMs)</option>
+            </select>
+            <textarea id="msg-status" placeholder="Mensagem de aviso..."
+              class="w-full p-2 border rounded text-sm"></textarea>
+            <input id="data-status" type="datetime-local" class="w-full p-2 border rounded text-sm" />
+            <button onclick="agendarStatus()"
+              class="w-full bg-purple-600 text-white py-2 rounded font-bold hover:bg-purple-700">
+              Agendar Status
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white p-6 rounded-xl shadow-lg">
+        <h2 class="text-xl font-bold mb-4 flex justify-between">
+          Fila de Execução
+          <button onclick="atualizarFila()" class="text-sm font-normal text-blue-500">Atualizar</button>
+        </h2>
+
+        <div class="overflow-x-auto text-[11px]">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-gray-100 text-gray-600">
+                <th class="p-2 border uppercase">Tipo</th>
+                <th class="p-2 border uppercase">Data/Hora</th>
+                <th class="p-2 border uppercase">Conteúdo</th>
+                <th class="p-2 border uppercase text-center">Status</th>
+                <th class="p-2 border uppercase text-center">Ação</th>
+              </tr>
+            </thead>
+            <tbody id="tabela-fila">
+              <tr>
+                <td colspan="5" class="p-4 text-center text-gray-400">Carregando agendamentos...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    let grupoAtivo = null;
+
+    // --- QR (busca no backend) ---
+    async function atualizarQR() {
+      try {
+        const res = await fetch('/qr', { cache: 'no-store' });
+
+        if (res.status === 204) {
+          document.getElementById('qr-status').innerText = 'QR indisponível (talvez já conectou).';
+          document.getElementById('qr-img').classList.add('hidden');
+          return;
         }
 
-        async function carregarGrupos() {
-            const res = await fetch('/grupos');
-            if (!res.ok) return;
-            const grupos = await res.json();
-            const container = document.getElementById('lista-grupos');
-            container.innerHTML = grupos.map(g => `
-                <div onclick="selecionarGrupo('${g.id}', '${g.name}')" class="p-2 border rounded cursor-pointer hover:bg-blue-50 transition">
-                    ${g.name}
-                </div>
-            `).join('');
-        }
+        const dados = await res.json();
+        if (!dados.qr) return;
 
-        function selecionarGrupo(id, nome) {
-            document.getElementById('chat-id').value = id;
-            document.getElementById('nome-grupo').innerText = nome;
-            alert("Grupo selecionado: " + nome);
-        }
+        const img = document.getElementById('qr-img');
+        img.src = dados.qr;
+        img.classList.remove('hidden');
+        document.getElementById('qr-status').innerText = 'Escaneie com o WhatsApp.';
+      } catch (e) {
+        document.getElementById('qr-status').innerText = 'Erro ao buscar QR.';
+      }
+    }
 
-        async function agendar() {
-            const data = {
-                chatId: document.getElementById('chat-id').value,
-                link: document.getElementById('link-input').value,
-                descricao: document.getElementById('desc-input').value,
-                data: document.getElementById('data-input').value
-            };
-            const res = await fetch('/agendar-link', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(data)
-            });
-            if (res.ok) { alert("Agendado!"); atualizarFila(); }
-        }
+    setInterval(atualizarQR, 2000);
+    atualizarQR();
 
-        async function atualizarFila() {
-            const res = await fetch('/listagem-geral');
-            const dados = await res.json();
-            const tbody = document.getElementById('tbody-fila');
-            tbody.innerHTML = dados.map(d => `
-                <tr class="border-b text-sm">
-                    <td class="p-2">${new Date(d.data_postagem).toLocaleString()}</td>
-                    <td class="p-2">${d.descricao || 'Sem desc.'}</td>
-                    <td class="p-2">${d.enviado ? '✅' : '⏳'}</td>
-                    <td class="p-2"><button onclick="remover(${d.id})" class="text-red-500">Excluir</button></td>
-                </tr>
-            `).join('');
-        }
+    // Carrega a lista de grupos do WhatsApp
+    async function carregarGrupos() {
+      try {
+        const res = await fetch('/grupos');
+        const dados = await res.json();
 
-        async function remover(id) {
-            if(confirm("Excluir?")) {
-                await fetch(`/remover/link/${id}`, { method: 'DELETE' });
-                atualizarFila();
-            }
-        }
+        const container = document.getElementById('lista-grupos');
+        container.innerHTML = '';
 
-        setInterval(checarStatus, 5000);
-        setInterval(atualizarFila, 10000);
-        checarStatus();
+        if (dados.erro) throw new Error(dados.erro);
+
+        dados.forEach(g => {
+          const b = document.createElement('button');
+          b.className = 'w-full text-left p-3 border rounded hover:bg-blue-50 mb-2 transition shadow-sm bg-white';
+          b.innerHTML = `${g.name}<br><span class="text-[10px] text-gray-400 font-mono">${g.id}</span>`;
+          b.onclick = () => {
+            grupoAtivo = g;
+            document.getElementById('nome-grupo').innerText = g.name;
+            document.getElementById('painel-controle').classList.remove('opacity-50', 'pointer-events-none');
+          };
+          container.appendChild(b);
+        });
+      } catch (err) {
+        document.getElementById('lista-grupos').innerHTML = `<p class="text-red-500">Erro: ${err.message}</p>`;
+      }
+    }
+
+    // Envia agendamento de Link
+    async function agendarLink() {
+      const dataInput = document.getElementById('data-link').value;
+      const linkInput = document.getElementById('url-link').value;
+      const descInput = document.getElementById('desc-link').value;
+
+      if (!grupoAtivo || !dataInput || !linkInput) {
+        alert('Preencha o Grupo, o Link e a Data!');
+        return;
+      }
+
+      const body = { chatId: grupoAtivo.id, descricao: descInput, link: linkInput, data: dataInput };
+      const response = await fetch('/agendar-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      if (response.ok) {
+        alert('Link agendado!');
         atualizarFila();
-    </script>
+      } else {
+        alert('Erro ao agendar link.');
+      }
+    }
+
+    // Envia agendamento de Status
+    async function agendarStatus() {
+      const dataInput = document.getElementById('data-status').value;
+      const acaoInput = document.getElementById('acao-status').value;
+
+      if (!grupoAtivo || !dataInput) {
+        alert('Selecione o grupo e a data!');
+        return;
+      }
+
+      const body = {
+        chatId: grupoAtivo.id,
+        acao: acaoInput,
+        mensagem: document.getElementById('msg-status').value,
+        data: dataInput
+      };
+
+      const response = await fetch('/agendar-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      if (response.ok) {
+        alert('Status agendado!');
+        atualizarFila();
+      } else {
+        alert('Erro ao agendar status.');
+      }
+    }
+
+    // Busca todos os agendamentos do Supabase via Backend
+    async function atualizarFila() {
+      const tbody = document.getElementById('tabela-fila');
+
+      try {
+        const res = await fetch('/listagem-geral');
+        const dados = await res.json();
+
+        tbody.innerHTML = '';
+
+        if (!dados || dados.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-gray-400">Nenhum agendamento encontrado.</td></tr>`;
+          return;
+        }
+
+        dados.forEach(d => {
+          const statusBool = d.concluido;
+          const dataRef = new Date(d.data_ref).toLocaleString('pt-BR');
+          const conteudo = d.link || d.mensagem || '';
+
+          tbody.innerHTML += `
+            <tr class="border-b hover:bg-gray-50 transition">
+              <td class="p-2 font-bold text-gray-700 uppercase">${d.tipo}</td>
+              <td class="p-2 font-mono text-gray-500">${dataRef}</td>
+              <td class="p-2 truncate max-w-[200px]" title="${conteudo.replaceAll('"', '&quot;')}">${conteudo}</td>
+              <td class="p-2 text-center">
+                ${statusBool ? '<span class="text-green-600 font-bold">OK</span>' : '<span class="text-orange-500 font-bold">Pendente</span>'}
+              </td>
+              <td class="p-2 text-center">
+                ${!statusBool ? `<button onclick="remover('${d.tipo}', '${d.id}')" class="text-red-500 hover:underline">Excluir</button>` : '-'}
+              </td>
+            </tr>
+          `;
+        });
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-red-500">Erro ao carregar fila.</td></tr>`;
+      }
+    }
+
+    // Remove agendamento (rota não existe no seu backend atual; mantive como estava)
+    async function remover(tipo, id) {
+      if (confirm('Deseja realmente remover este agendamento de tipo?')) {
+        const res = await fetch(`/remover/${tipo}/${id}`, { method: 'DELETE' });
+        if (res.ok) atualizarFila();
+        else alert('Erro ao remover.');
+      }
+    }
+
+    // Init
+    carregarGrupos();
+    atualizarFila();
+    setInterval(atualizarFila, 30000);
+  </script>
 </body>
 </html>
